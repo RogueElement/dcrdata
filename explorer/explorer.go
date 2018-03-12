@@ -55,6 +55,7 @@ const (
 type explorerDataSourceLite interface {
 	GetExplorerBlock(hash string) *BlockInfo
 	GetExplorerBlocks(start int, end int) []*BlockBasic
+	GetExplorerHomeInfo(height int64) (*BlockBasic, *HomeInfo)
 	GetBlockHeight(hash string) (int64, error)
 	GetBlockHash(idx int64) (string, error)
 	GetExplorerTx(txid string) *TxInfo

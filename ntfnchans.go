@@ -25,6 +25,8 @@ const (
 	// expNewTxChanBuffer is the size of the new transaction buffer for explorer
 	expNewTxChanBuffer = 70
 
+	expNewBlockChanBuffer = 4
+
 	reorgBuffer = 2
 
 	// relevantMempoolTxChanBuffer is the size of the new transaction channel
@@ -46,6 +48,7 @@ var ntfnChans struct {
 	relevantTxMempoolChan             chan *dcrutil.Tx
 	newTxChan                         chan *mempool.NewTx
 	expNewTxChan                      chan *explorer.NewMempoolTx
+	expNewBlockChan                   chan int64
 }
 
 func makeNtfnChans(cfg *config) {
@@ -85,6 +88,9 @@ func makeNtfnChans(cfg *config) {
 
 	// New mempool tx chan for explorer
 	ntfnChans.expNewTxChan = make(chan *explorer.NewMempoolTx, expNewTxChanBuffer)
+
+	// New block chan for explorer
+	ntfnChans.expNewBlockChan = make(chan int64, expNewBlockChanBuffer)
 }
 
 func closeNtfnChans() {
@@ -130,5 +136,8 @@ func closeNtfnChans() {
 	}
 	if ntfnChans.expNewTxChan != nil {
 		close(ntfnChans.expNewTxChan)
+	}
+	if ntfnChans.expNewBlockChan != nil {
+		close(ntfnChans.expNewBlockChan)
 	}
 }

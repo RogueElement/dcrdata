@@ -144,6 +144,11 @@ func makeNodeNtfnHandlers(cfg *config) (*rpcclient.NotificationHandlers, *collec
 			height := int32(blockHeader.Height)
 			hash := blockHeader.BlockHash()
 
+			select {
+			case ntfnChans.expNewBlockChan <- int64(height):
+			default:
+			}
+
 			// queue this block
 			blockQueue.q <- &blockHashHeight{
 				hash:   hash,

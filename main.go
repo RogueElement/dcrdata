@@ -102,6 +102,62 @@ func mainCore() error {
 	log.Infof("Connected to dcrd (JSON-RPC API v%s) on %v",
 		nodeVer.String(), curnet.String())
 
+	rpcDb := explorer.NewRpc(activeChain, dcrdClient)
+
+	// Create the explorer system
+	explore := explorer.New(rpcDb, nil, cfg.UseRealIP, ver.String())
+	if explore == nil {
+		return fmt.Errorf("failed to create new explorer (templates missing?)")
+	}
+	explore.UseSIGToReloadTemplates()
+
+	explore.StartBlockCollector(ntfnChans.expNewBlockChan)
+	explore.StartMempoolMonitor(ntfnChans.expNewTxChan)
+
+	defer explore.StopWebsocketHub()
+	defer explore.StopMempoolMonitor(ntfnChans.expNewTxChan)
+	defer explore.StopBlockCollector(ntfnChans.expNewBlockChan)
+
+	webMux := chi.NewRouter()
+	webMux.Get("/", explore.Home)
+	webMux.Get("/ws", explore.RootWebsocket)
+	webMux.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./public/images/favicon.ico")
+	})
+	cacheControlMaxAge := int64(cfg.CacheControlMaxAge)
+	FileServer(webMux, "/js", http.Dir("./public/js"), cacheControlMaxAge)
+	FileServer(webMux, "/css", http.Dir("./public/css"), cacheControlMaxAge)
+	FileServer(webMux, "/fonts", http.Dir("./public/fonts"), cacheControlMaxAge)
+	FileServer(webMux, "/images", http.Dir("./public/images"), cacheControlMaxAge)
+	webMux.NotFound(explore.NotFound)
+
+	webMux.Mount("/explorer", explore.Mux)
+	webMux.Get("/blocks", explore.Blocks)
+	webMux.Get("/mempool", explore.Mempool)
+	webMux.With(explore.BlockHashPathOrIndexCtx).Get("/block/{blockhash}", explore.Block)
+	webMux.With(explorer.TransactionHashCtx).Get("/tx/{txid}", explore.TxPage)
+	webMux.With(explorer.AddressPathCtx).Get("/address/{address}", explore.AddressPage)
+	webMux.Get("/decodetx", explore.DecodeTxPage)
+	webMux.Get("/search", explore.Search)
+
+	// HTTP profiler
+	if cfg.HTTPProfile {
+		profPath := cfg.HTTPProfPath
+		log.Warnf("Starting the HTTP profiler on path %s.", profPath)
+		// http pprof uses http.DefaultServeMux
+		http.Handle("/", http.RedirectHandler(profPath+"/debug/pprof/", http.StatusSeeOther))
+		webMux.Mount(profPath, http.StripPrefix(profPath, http.DefaultServeMux))
+	}
+
+	// Ctrl-C to shut down.
+	// Nothing should be sent the quit channel.  It should only be closed.
+	quit := make(chan struct{})
+
+	if err = listenAndServeProto(cfg.APIListen, cfg.APIProto, webMux); err != nil {
+		log.Criticalf("listenAndServeProto: %v", err)
+		close(quit)
+	}
+
 	// Sqlite output
 	dbPath := filepath.Join(cfg.DataDir, cfg.DBFileName)
 	dbInfo := dcrsqlite.DBInfo{FileName: dbPath}
@@ -157,9 +213,6 @@ func mainCore() error {
 		}
 	}
 
-	// Ctrl-C to shut down.
-	// Nothing should be sent the quit channel.  It should only be closed.
-	quit := make(chan struct{})
 	// Only accept a single CTRL+C
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -270,15 +323,6 @@ func mainCore() error {
 	blockDataSavers = append(blockDataSavers, &baseDB)
 	mempoolSavers = append(mempoolSavers, baseDB.MPC)
 
-	// Create the explorer system
-	explore := explorer.New(&baseDB, auxDB, cfg.UseRealIP, ver.String())
-	if explore == nil {
-		return fmt.Errorf("failed to create new explorer (templates missing?)")
-	}
-	explore.UseSIGToReloadTemplates()
-	defer explore.StopWebsocketHub()
-	defer explore.StopMempoolMonitor(ntfnChans.expNewTxChan)
-
 	blockDataSavers = append(blockDataSavers, explore)
 
 	// Sync up with the blockchain
@@ -369,16 +413,11 @@ func mainCore() error {
 
 	// Initial data summary for web ui. stakedb must be at the same height, so
 	// we get do this before starting the monitors.
-	blockData, _, err := collector.Collect()
+	_, _, err = collector.Collect()
 	if err != nil {
 		return fmt.Errorf("Block data collection for initial summary failed: %v",
 			err.Error())
 	}
-	if err = explore.Store(blockData, nil); err != nil {
-		return fmt.Errorf("Failed to store initial block data for explorer pages: %v", err.Error())
-	}
-
-	explore.StartMempoolMonitor(ntfnChans.expNewTxChan)
 
 	// blockdata collector
 	wg.Add(2)
@@ -450,43 +489,7 @@ func mainCore() error {
 
 	apiMux := newAPIRouter(app, cfg.UseRealIP)
 
-	webMux := chi.NewRouter()
-	webMux.Get("/", explore.Home)
-	webMux.Get("/ws", explore.RootWebsocket)
-	webMux.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./public/images/favicon.ico")
-	})
-	cacheControlMaxAge := int64(cfg.CacheControlMaxAge)
-	FileServer(webMux, "/js", http.Dir("./public/js"), cacheControlMaxAge)
-	FileServer(webMux, "/css", http.Dir("./public/css"), cacheControlMaxAge)
-	FileServer(webMux, "/fonts", http.Dir("./public/fonts"), cacheControlMaxAge)
-	FileServer(webMux, "/images", http.Dir("./public/images"), cacheControlMaxAge)
-	webMux.NotFound(explore.NotFound)
 	webMux.Mount("/api", apiMux.Mux)
-
-	webMux.Mount("/explorer", explore.Mux)
-	webMux.Get("/blocks", explore.Blocks)
-	webMux.Get("/mempool", explore.Mempool)
-	webMux.With(explore.BlockHashPathOrIndexCtx).Get("/block/{blockhash}", explore.Block)
-	webMux.With(explorer.TransactionHashCtx).Get("/tx/{txid}", explore.TxPage)
-	webMux.With(explorer.AddressPathCtx).Get("/address/{address}", explore.AddressPage)
-	webMux.Get("/decodetx", explore.DecodeTxPage)
-	webMux.Get("/search", explore.Search)
-
-	// HTTP profiler
-	if cfg.HTTPProfile {
-		profPath := cfg.HTTPProfPath
-		log.Warnf("Starting the HTTP profiler on path %s.", profPath)
-		// http pprof uses http.DefaultServeMux
-		http.Handle("/", http.RedirectHandler(profPath+"/debug/pprof/", http.StatusSeeOther))
-		webMux.Mount(profPath, http.StripPrefix(profPath, http.DefaultServeMux))
-	}
-
-	if err = listenAndServeProto(cfg.APIListen, cfg.APIProto, webMux); err != nil {
-		log.Criticalf("listenAndServeProto: %v", err)
-		close(quit)
-	}
-
 	// Wait for notification handlers to quit
 	wg.Wait()
 
