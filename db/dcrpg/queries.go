@@ -174,6 +174,38 @@ func RetrieveUnspentTickets(db *sql.DB) (ids []uint64, hashes []string, err erro
 	return ids, hashes, err
 }
 
+func RetrieveTicketsInPool(db *sql.DB, minMatureHeight uint64, limit int64, offset int64) (ids []uint64, hashes []string, blockHeights []int64, prices []float64, fees []float64, err error) {
+	rows, err := db.Query(internal.SelectTicketsInPool, minMatureHeight, limit, offset)
+	if err != nil {
+		return ids, hashes, blockHeights, prices, fees, err
+
+	}
+	defer func() {
+		if e := rows.Close(); e != nil {
+			log.Errorf("Close of Query failed: %v", e)
+		}
+	}()
+
+	for rows.Next() {
+		var id uint64
+		var hash string
+		var height int64
+		var price, fee float64
+		err = rows.Scan(&id, &hash, &height, &price, &fee)
+		if err != nil {
+			break
+		}
+
+		ids = append(ids, id)
+		hashes = append(hashes, hash)
+		blockHeights = append(blockHeights, height)
+		prices = append(prices, price)
+		fees = append(fees, fee)
+	}
+
+	return ids, hashes, blockHeights, prices, fees, err
+}
+
 func RetrieveTicketIDHeightByHash(db *sql.DB, ticketHash string) (id uint64, blockHeight int64, err error) {
 	err = db.QueryRow(internal.SelectTicketIDHeightByHash, ticketHash).Scan(&id, &blockHeight)
 	return

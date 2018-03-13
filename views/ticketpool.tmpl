@@ -1,0 +1,35 @@
+{{define "pool"}}
+<!DOCTYPE html>
+<html lang="en">
+    {{template "html-head" printf "Decode Raw Decred Transaction"}}
+    <body>
+        {{template "navbar"}}
+        <div class="container">
+                <table class="table table-sm striped" id="pool_tickets">
+                        <thead>
+                            <th>Transactions ID</th>
+                            <th>Block Height</th>
+                            <th>Price</th>
+                            <th>Fee</th>
+                        </thead>
+                        <tbody>
+                                {{range .Tickets}}
+                                <tr>
+                                    <td class="break-word">
+                                        <span>
+                                            <a class="hash" href="/tx/{{.Hash}}">{{.Hash}}</a>
+                                        </span>
+                                    </td>
+                                    <td class="mono fs15">{{.BlockHeight}}</td>
+                                    <td class="mono fs15">{{template "decimalParts" (float64AsDecimalParts .Price false)}}</td>
+                                    <td class="mono fs15">{{template "decimalParts" (float64AsDecimalParts .Fee false)}}</td>
+                                </tr>
+                                {{end}}
+                        </tbody>
+                </table>
+        </div>
+        {{ template "footer" . }}
+    </body>
+</html>
+{{end}}
+        

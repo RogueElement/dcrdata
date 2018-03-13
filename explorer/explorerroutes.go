@@ -157,6 +157,48 @@ func (exp *explorerUI) Mempool(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, str)
 }
 
+func (exp *explorerUI) TicketPool(w http.ResponseWriter, r *http.Request) {
+	if exp.liteMode {
+		exp.ErrorPage(w, "Ticket pool explorer only available in full mode", "", false)
+		return
+	}
+	limit, err := strconv.ParseInt(r.URL.Query().Get("n"), 10, 64)
+	if limit <= 0 || err != nil {
+		limit = defaultTicketPoolRows
+	}
+
+	offset, err := strconv.ParseInt(r.URL.Query().Get("start"), 10, 64)
+	if offset <= 0 || err != nil {
+		offset = 0
+	}
+
+	tickets, err := exp.explorerSource.TicketsInPool(limit, offset)
+	if err != nil {
+		log.Errorf("Unable to retrieve tickets in the ticket pool: %v", err)
+		exp.ErrorPage(w, "Something went wrong...", "and it's not your fault, try refreshing... that usually fixes things", false)
+		return
+	}
+
+	str, err := templateExecToString(exp.templates[ticketPoolTemplateIndex], "pool", struct {
+		Tickets []TicketPoolTx
+		Offset  int64
+		Version string
+	}{
+		tickets,
+		offset,
+		exp.Version,
+	})
+
+	if err != nil {
+		log.Errorf("Template execute failure: %v", err)
+		exp.ErrorPage(w, "Something went wrong...", "and it's not your fault, try refreshing... that usually fixes things", false)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, str)
+}
+
 // TxPage is the page handler for the "/tx" path
 func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 	// attempt to get tx hash string from URL path

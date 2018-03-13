@@ -467,6 +467,7 @@ func mainCore() error {
 	webMux.Mount("/explorer", explore.Mux)
 	webMux.Get("/blocks", explore.Blocks)
 	webMux.Get("/mempool", explore.Mempool)
+	webMux.Get("/pool", explore.TicketPool)
 	webMux.With(explore.BlockHashPathOrIndexCtx).Get("/block/{blockhash}", explore.Block)
 	webMux.With(explorer.TransactionHashCtx).Get("/tx/{txid}", explore.TxPage)
 	webMux.With(explorer.AddressPathCtx).Get("/address/{address}", explore.AddressPage)

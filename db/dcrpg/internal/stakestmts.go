@@ -55,6 +55,7 @@ const (
 	SelectTicketIDByHash         = `SELECT id FROM tickets WHERE tx_hash = $1;`
 	SelectTicketStatusByHash     = `SELECT id, spend_type, pool_status FROM tickets WHERE tx_hash = $1;`
 	SelectUnspentTickets         = `SELECT id, tx_hash FROM tickets WHERE spend_type = 0 OR spend_type = -1;`
+	SelectTicketsInPool          = `SELECT id, tx_hash, block_height, price, fee FROM tickets WHERE pool_status = 0 AND block_height <= $1 ORDER BY block_height DESC LIMIT $2 OFFSET $3;`
 
 	// Update
 	SetTicketSpendingInfoForHash = `UPDATE tickets

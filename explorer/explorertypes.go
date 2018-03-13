@@ -314,3 +314,10 @@ type NewMempoolTx struct {
 	Time int64
 	Hex  string
 }
+
+type TicketPoolTx struct {
+	Hash        string
+	BlockHeight int64
+	Price       float64
+	Fee         float64
+}

@@ -35,6 +35,7 @@ const (
 	homeTemplateIndex int = iota
 	rootTemplateIndex
 	mempoolTemplateIndex
+	ticketPoolTemplateIndex
 	blockTemplateIndex
 	txTemplateIndex
 	addressTemplateIndex
@@ -46,6 +47,8 @@ const (
 	maxExplorerRows              = 2000
 	minExplorerRows              = 20
 	defaultAddressRows     int64 = 20
+	defaultTicketPoolRows  int64 = 20
+	maxTicketPoolRows      int64 = 1000
 	MaxAddressRows         int64 = 1000
 	MaxUnconfirmedPossible int64 = 1000
 )
@@ -76,6 +79,7 @@ type explorerDataSource interface {
 	AddressHistory(address string, N, offset int64) ([]*dbtypes.AddressRow, *AddressBalance, error)
 	FillAddressTransactions(addrInfo *AddressInfo) error
 	BlockMissedVotes(blockHash string) ([]string, error)
+	TicketsInPool(limit int64, offset int64) ([]TicketPoolTx, error)
 }
 
 // TicketStatusText generates the text to display on the explorer's transaction
@@ -151,6 +155,14 @@ func (exp *explorerUI) reloadTemplates() error {
 		return err
 	}
 
+	poolTemplate, err := template.New("pool").Funcs(exp.templateHelpers).ParseFiles(
+		exp.templateFiles["ticketpool"],
+		exp.templateFiles["extras"],
+	)
+	if err != nil {
+		return err
+	}
+
 	blockTemplate, err := template.New("block").Funcs(exp.templateHelpers).ParseFiles(
 		exp.templateFiles["block"],
 		exp.templateFiles["extras"],
@@ -194,6 +206,7 @@ func (exp *explorerUI) reloadTemplates() error {
 	exp.templates[homeTemplateIndex] = homeTemplate
 	exp.templates[rootTemplateIndex] = explorerTemplate
 	exp.templates[mempoolTemplateIndex] = mempoolTemplate
+	exp.templates[ticketPoolTemplateIndex] = poolTemplate
 	exp.templates[blockTemplateIndex] = blockTemplate
 	exp.templates[txTemplateIndex] = txTemplate
 	exp.templates[addressTemplateIndex] = addressTemplate
@@ -268,6 +281,7 @@ func New(dataSource explorerDataSourceLite, primaryDataSource explorerDataSource
 	exp.templateFiles["home"] = filepath.Join("views", "home.tmpl")
 	exp.templateFiles["explorer"] = filepath.Join("views", "explorer.tmpl")
 	exp.templateFiles["mempool"] = filepath.Join("views", "mempool.tmpl")
+	exp.templateFiles["ticketpool"] = filepath.Join("views", "ticketpool.tmpl")
 	exp.templateFiles["block"] = filepath.Join("views", "block.tmpl")
 	exp.templateFiles["tx"] = filepath.Join("views", "tx.tmpl")
 	exp.templateFiles["extras"] = filepath.Join("views", "extras.tmpl")
@@ -446,6 +460,15 @@ func New(dataSource explorerDataSourceLite, primaryDataSource explorerDataSource
 		return noTemplateError(err)
 	}
 	exp.templates = append(exp.templates, mempoolTemplate)
+
+	poolTemplate, err := template.New("pool").Funcs(exp.templateHelpers).ParseFiles(
+		exp.templateFiles["ticketpool"],
+		exp.templateFiles["extras"],
+	)
+	if err != nil {
+		return noTemplateError(err)
+	}
+	exp.templates = append(exp.templates, poolTemplate)
 
 	blockTemplate, err := template.New("block").Funcs(exp.templateHelpers).ParseFiles(
 		exp.templateFiles["block"],
